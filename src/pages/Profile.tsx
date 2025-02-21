@@ -11,7 +11,9 @@ export default function Profile() {
     ...CONTRACTS.PROJECT_LISTING,
     functionName: "ownerProjects",
     args: [address as `0x${string}`, 0n],
-    enabled: !!address,
+    query: {
+      enabled: !!address,
+    },
   });
 
   if (!address) {
@@ -37,7 +39,6 @@ export default function Profile() {
             </div>
           ) : projectData ? (
             <div>
-              {/* Project list will be implemented here */}
               <p>Projects will be displayed here</p>
             </div>
           ) : (
