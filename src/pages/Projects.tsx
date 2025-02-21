@@ -1,8 +1,8 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useContractRead } from "wagmi";
-import { CONTRACTS } from "../config/contracts";
+import { useContractRead, useContractWrite } from "wagmi";
+import { CONTRACTS, ProjectData } from "../config/contracts";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -10,41 +10,51 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
-
-type ProjectData = readonly [
-  id: bigint,
-  name: string,
-  description: string,
-  owner: `0x${string}`,
-  subscriptionEndTime: bigint,
-  isListed: boolean,
-  totalDonations: bigint
-];
+import { formatEther, parseEther } from "viem";
 
 export default function Projects() {
   const [formData, setFormData] = useState({ name: "", description: "" });
   const { toast } = useToast();
 
-  const { data: projectCounter, isLoading: isLoadingCounter } = useContractRead({
+  // Get total number of projects
+  const { data: projectCount } = useContractRead({
     ...CONTRACTS.PROJECT_LISTING,
     functionName: "projectCounter",
   });
 
-  // Fetch all projects
-  const { data: projects, isLoading: isLoadingProjects } = useContractRead({
+  // Get latest project details
+  const { data: latestProject, isLoading: isLoadingProject } = useContractRead({
     ...CONTRACTS.PROJECT_LISTING,
     functionName: "projects",
-    args: [0n], // Start with first project
+    args: [projectCount ? projectCount - 1n : 0n],
+    enabled: projectCount !== undefined && projectCount > 0n,
+  });
+
+  // Contract write function for listing new project
+  const { writeAsync: listProject } = useContractWrite({
+    ...CONTRACTS.PROJECT_LISTING,
+    functionName: "listProject",
   });
 
   const handleListProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Implement listing project logic here...
-    toast({
-      title: "Project Listed",
-      description: "Your project has been submitted for DAO approval.",
-    });
+    try {
+      await listProject({
+        args: [formData.name, formData.description],
+        value: parseEther("0.1"), // Example subscription fee
+      });
+      
+      toast({
+        title: "Success",
+        description: "Project submitted successfully!",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to submit project. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const renderProjectCard = (project: ProjectData) => {
@@ -66,7 +76,7 @@ export default function Projects() {
         </div>
         <div className="flex justify-between items-center">
           <span className="text-primary-600 font-semibold">
-            {totalDonations.toString()} ETH raised
+            {formatEther(totalDonations)} ETH raised
           </span>
           <Link to={`/project/${id.toString()}`}>
             <Button variant="outline">View Details</Button>
@@ -94,6 +104,7 @@ export default function Projects() {
               <DialogTitle>List a New Project</DialogTitle>
               <DialogDescription>
                 Fill out the details below to submit your project for DAO approval.
+                A subscription fee of 0.1 ETH is required.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleListProject} className="space-y-4">
@@ -122,7 +133,7 @@ export default function Projects() {
                 />
               </div>
               <Button type="submit" className="w-full bg-primary-600 hover:bg-primary-700">
-                Submit Project
+                Submit Project (0.1 ETH)
               </Button>
             </form>
           </DialogContent>
@@ -130,7 +141,7 @@ export default function Projects() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {isLoadingCounter || isLoadingProjects ? (
+        {isLoadingProject ? (
           Array.from({ length: 3 }).map((_, i) => (
             <Card key={i} className="p-6">
               <Skeleton className="h-32 w-full mb-4" />
@@ -138,8 +149,8 @@ export default function Projects() {
               <Skeleton className="h-4 w-1/2" />
             </Card>
           ))
-        ) : projects ? (
-          renderProjectCard(projects as unknown as ProjectData)
+        ) : latestProject ? (
+          renderProjectCard(latestProject as unknown as ProjectData)
         ) : (
           <Card className="p-6">
             <p className="text-gray-600">No projects found</p>
