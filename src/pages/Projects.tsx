@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useContractRead, useContractWrite } from "wagmi";
+import { useContractRead, useContractWrite, useAccount } from "wagmi";
 import { CONTRACTS, ProjectData } from "../config/contracts";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { formatEther, parseEther } from "viem";
 
 export default function Projects() {
   const [formData, setFormData] = useState({ name: "", description: "" });
   const { toast } = useToast();
+  const { address } = useAccount();
 
   // Get total number of projects
   const { data: projectCount } = useContractRead({
@@ -27,23 +28,31 @@ export default function Projects() {
     ...CONTRACTS.PROJECT_LISTING,
     functionName: "projects",
     args: [projectCount ? projectCount - 1n : 0n],
-    enabled: projectCount !== undefined && projectCount > 0n,
   });
 
   // Contract write function for listing new project
-  const { writeAsync: listProject } = useContractWrite({
+  const { write: listProject, isLoading: isListing } = useContractWrite({
     ...CONTRACTS.PROJECT_LISTING,
     functionName: "listProject",
   });
 
   const handleListProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await listProject({
-        args: [formData.name, formData.description],
-        value: parseEther("0.1"), // Example subscription fee
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet first.",
+        variant: "destructive",
       });
-      
+      return;
+    }
+
+    try {
+      listProject({
+        args: [formData.name, formData.description],
+        value: parseEther("0.1"), // 0.1 ETH subscription fee
+      });
+
       toast({
         title: "Success",
         description: "Project submitted successfully!",
@@ -132,8 +141,12 @@ export default function Projects() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full bg-primary-600 hover:bg-primary-700">
-                Submit Project (0.1 ETH)
+              <Button 
+                type="submit" 
+                className="w-full bg-primary-600 hover:bg-primary-700"
+                disabled={isListing || !address}
+              >
+                {isListing ? "Submitting..." : "Submit Project (0.1 ETH)"}
               </Button>
             </form>
           </DialogContent>
